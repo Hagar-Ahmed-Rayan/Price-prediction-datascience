@@ -1,0 +1,147 @@
+
+
+data =read.csv('train.csv') 
+dataSet = data
+test_data =read.csv('test.csv') 
+Id<-test_data$Id
+
+#DROP COLS have null values
+drop <- c("Fence","MiscFeature", "PoolQC","Alley","FireplaceQu","GarageYrBlt")
+data = data[,!(names(data) %in% drop)]
+test_data <- test_data[,!(names(test_data) %in% drop)]
+
+# Replace the missing data of numerical cols:
+numericCol <- c("LotFrontage", "LotArea", "MasVnrArea","BsmtFinSF1","BsmtUnfSF","TotalBsmtSF", "X1stFlrSF", "X2ndFlrSF", "GrLivArea","MoSold","WoodDeckSF","OpenPorchSF","GarageArea" )
+for (col in numericCol){
+  data[[col]] = ifelse(is.na(data[[col]]),
+                       ave(data[[col]], FUN = function (x)mean(x, na.rm = TRUE)),
+                       data[[col]])
+  test_data[[col]] = ifelse(is.na(test_data[[col]]),
+                            ave(dataSet[[col]], FUN = function (x)mean(x, na.rm = TRUE))
+                            , test_data[[col]])
+}
+#BsmtFullBath
+catCols <- c("MSZoning", "Street", "LotShape", "LotConfig", "LandSlope", "Condition1", "Neighborhood",
+             "BldgType", "HouseStyle","RoofStyle", "RoofMatl", "ExterQual"
+             , "ExterCond", "Foundation", "BsmtQual", "BsmtCond", "BsmtExposure", "BsmtFinType1", "BsmtFinType2"
+             , "Heating", "HeatingQC", "CentralAir", "Electrical", "KitchenQual", "Functional", "GarageType"
+             , "GarageFinish", "GarageQual", "GarageCond", "PavedDrive", "SaleType", 
+             "SaleCondition", "Exterior1st", "Exterior2nd","MasVnrType","Condition2","LandContour","Utilities","BsmtFullBath","HalfBath","GarageCars")
+#fill null categorical data with mode
+calc_mode <- function(x){
+  
+  # List the distinct / unique values
+  distinct_values <- unique(x)
+  
+  # Count the occurrence of each distinct value
+  distinct_tabulate <- tabulate(match(x, distinct_values))
+  
+  # Return the value with the highest occurrence
+  distinct_values[which.max(distinct_tabulate)]
+}
+for (col in catCols){
+  
+  data[[col]] = ifelse(is.na(data[[col]]),  calc_mode(data[[col]]), data[[col]])
+  test_data[[col]] = ifelse(is.na(test_data[[col]]),  calc_mode(dataSet[[col]]), test_data[[col]])
+}
+cleanedData <- data
+test_data
+print(test_data)
+# encode categorical data:
+for (col in catCols){
+  print(col)
+  data[[col]] <- as.numeric(factor(data[[col]]))
+  test_data[[col]] <- as.numeric(factor(test_data[[col]]))
+}
+for (col in catCols){
+  print(col)
+  test_data[[col]] <- as.numeric(factor(test_data[[col]]))
+}
+encodedData <- data
+#SUMMARY
+
+Idd<-data$Id
+Idt<-test_data$Id
+output <- summary(data)
+print(output)
+
+## Correlation
+colNames <- colnames(data)
+colsNoCorr <-c()
+for (col in colNames){
+  print(col)
+  print(cor(data[, c(col)],data$ SalePrice))
+  if (abs(cor(data[, c(col)], data$SalePrice))<=0.17) # 
+    colsNoCorr <- append(colsNoCorr, col)
+}
+
+#### drop columns with low correlation:
+data = data[,!(names(data) %in% colsNoCorr)]
+test_data = test_data[,!(names(test_data) %in% colsNoCorr)]
+correlatedData <- data
+#######################################################################################################
+
+# Check data types of columns
+sapply(data, class)
+#colnames(data)[column_types != "numeric"]
+
+#### Normalizing data: ####
+#install.packages("caret")
+library(caret)
+
+ntr <- ncol(data)
+nte <- ncol(test_data)
+# cat("Number of columns in Data Frame :", n)
+data[-ntr] = scale(data[-ntr])
+test_data[-nte] = scale(test_data[-nte])
+
+(scale(data))
+(scale(test_data))
+dataset=data
+
+############################################################################
+### split data ###
+#install.packages("caTools")
+library(caTools)
+set.seed(123)
+split = sample.split(data, SplitRatio = 0.8)
+
+training_set = subset(data, split == TRUE)
+valid_set = subset(data, split == FALSE)
+
+#####################################################################################
+test_data#29
+data#30
+#install.packages("randomForest")
+library(randomForest)
+set.seed(42)
+data
+SalePrice
+
+model_rf <- randomForest(
+  SalePrice ~ .,
+  data = data,
+  ntree = 1000,
+  mtry = sqrt(ncol(data) - 1),
+  importance = TRUE
+)
+
+### Model 1:
+#valid data:
+test_data
+valid <- predict(model_rf, newdata = valid_set)
+print(valid)
+pred_randomForest <- predict(model_rf, newdata = test_data)
+SalePrice<-pred_randomForest
+
+
+df1<-data.frame(Id,SalePrice)
+write.csv(df1, "data_RF.csv", row.names=FALSE)
+#### Error: 0.16709
+### Model 2:
+linearmodel = lm(SalePrice ~ ., data = data)
+predictions_lin <- predict(linearmodel, newdata = test_data)
+SalePrice<-predictions_lin
+df2 <- data.frame(Id,SalePrice)
+write.csv(df2, "data_LR.csv", row.names=FALSE)
+
